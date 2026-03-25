@@ -1,8 +1,8 @@
-import fetch from 'node-fetch';   // if using Node < 18; for Node 18+ you can use global fetch
+import fetch from 'node-fetch';
 
 const GRAFANA_URL = 'https://monitor.trax-cloud.com/api/datasources/proxy/29/render';
-const SESSION_ID = process.env.GRAFANA_SESSION;   // from GitHub Secrets
-const FIREBASE_BASE_URL = process.env.FIREBASE_URL; // from GitHub Secrets
+const SESSION_ID = process.env.GRAFANA_SESSION;
+const FIREBASE_BASE_URL = process.env.FIREBASE_URL;
 
 const PROJECTS = [
   "beiersdorfde", "beiersdorfes", "beiersdorfkz", "beiersdorfpt", "beiersdorfru",
@@ -64,7 +64,6 @@ async function updateProject(project) {
     };
   }
 
-  // Update Firebase
   const firebaseUrl = `${FIREBASE_BASE_URL}${project}.json`;
   const fbResponse = await fetch(firebaseUrl, {
     method: 'PATCH',

@@ -1,9 +1,11 @@
 name: Update Projects Data
 
 on:
+  push:                      # runs when you push to the main branch
+    branches: [ main ]
   schedule:
-    - cron: '*/15 * * * *'   # every 15 minutes
-  workflow_dispatch:          # allow manual run
+    - cron: '*/15 * * * *'   # runs every 15 minutes automatically
+  workflow_dispatch:         # allows manual run from GitHub UI
 
 jobs:
   update:

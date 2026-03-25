@@ -2,8 +2,8 @@ name: Update Projects Data
 
 on:
   schedule:
-    - cron: '*/15 * * * *'
-  workflow_dispatch:
+    - cron: '*/15 * * * *'   # every 15 minutes
+  workflow_dispatch:          # allow manual run
 
 jobs:
   update:

@@ -26,6 +26,7 @@ const METRICS = [
   { path: "category_expert", name: "category expert" },
   { path: "offline_validation", name: "offline validation" },
   { path: "pricing_voting", name: "Pricing voting" },
+  { path: "voting_engine", name: "Engine Voting" },
   { path: "offline_voting", name: "offline voting" }
 ];
 

@@ -1,3 +1,4 @@
+
 import fetch from 'node-fetch';
 
 const GRAFANA_URL = 'https://monitor.trax-cloud.com/api/datasources/proxy/29/render';
@@ -31,59 +32,41 @@ const METRICS = [
 ];
 
 async function updateProject(project) {
-
-  // 🔹 Build payload (Total + Oldest Task)
-  const payload = METRICS.flatMap(m => ([
-    `target=alias(prod.gauges.selector.queue.${m.path}.${project}.total,'${m.name} - Total')`,
-    `target=alias(aliasByNode(prod.gauges.selector.queue.${m.path}.${project}.oldestTask,4),'${m.name} - Oldest Task')`
-  ])).join("&") + "&from=-1h&until=now&format=json";
+  const payload = METRICS.map(m =>
+    target=alias(prod.gauges.selector.queue.${m.path}.${project}.total,'${m.name}')
+  ).join("&") + "&from=-1h&until=now&format=json";
 
   const response = await fetch(GRAFANA_URL, {
     method: 'POST',
     headers: {
-      'Cookie': `grafana_session=${SESSION_ID}`,
+      'Cookie': grafana_session=${SESSION_ID},
       'Content-Type': 'application/x-www-form-urlencoded'
     },
     body: payload
   });
 
   if (!response.ok) {
-    throw new Error(`Grafana request failed for ${project}: ${response.status}`);
+    throw new Error(Grafana request failed for ${project}: ${response.status});
   }
 
   const json = await response.json();
 
   const batchData = {};
-
   for (const series of json) {
     const validPoints = series.datapoints.filter(dp => dp[0] !== null);
     const last = validPoints.pop();
     if (!last) continue;
 
     const timestamp = new Date(last[1] * 1000).toISOString();
+    const metricName = series.target;
 
-    // 🔹 detect type
-    const isOldest = series.target.includes("Oldest Task");
-
-    const metricName = series.target
-      .replace(" - Total", "")
-      .replace(" - Oldest Task", "");
-
-    const type = isOldest ? "oldestTask" : "total";
-
-    // 🔹 structure per metric
-    if (!batchData[metricName]) {
-      batchData[metricName] = {};
-    }
-
-    batchData[metricName][type] = {
-      value: String(last[0]),
+    batchData[metricName] = {
+      current: String(last[0]),
       lastUpdated: timestamp
     };
   }
 
-  const firebaseUrl = `${FIREBASE_BASE_URL}${project}.json`;
-
+  const firebaseUrl = ${FIREBASE_BASE_URL}${project}.json;
   const fbResponse = await fetch(firebaseUrl, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
@@ -91,10 +74,10 @@ async function updateProject(project) {
   });
 
   if (!fbResponse.ok) {
-    throw new Error(`Firebase update failed for ${project}: ${fbResponse.status}`);
+    throw new Error(Firebase update failed for ${project}: ${fbResponse.status});
   }
 
-  console.log(`✅ Updated: ${project}`);
+  console.log(✅ Updated: ${project});
 }
 
 async function main() {
@@ -102,7 +85,7 @@ async function main() {
     try {
       await updateProject(project);
     } catch (err) {
-      console.error(`❌ Error in ${project}:`, err.message);
+      console.error(❌ Error in ${project}:, err.message);
     }
   }
   console.log("🚀 DONE");

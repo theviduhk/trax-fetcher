@@ -31,9 +31,12 @@ const METRICS = [
 ];
 
 async function updateProject(project) {
-  const payload = METRICS.map(m =>
-    `target=alias(prod.gauges.selector.queue.${m.path}.${project}.total,'${m.name}')`
-  ).join("&") + "&from=-1h&until=now&format=json";
+
+  // 🔹 Build payload (Total + Oldest Task)
+  const payload = METRICS.flatMap(m => ([
+    `target=alias(prod.gauges.selector.queue.${m.path}.${project}.total,'${m.name} - Total')`,
+    `target=alias(aliasByNode(prod.gauges.selector.queue.${m.path}.${project}.oldestTask,4),'${m.name} - Oldest Task')`
+  ])).join("&") + "&from=-1h&until=now&format=json";
 
   const response = await fetch(GRAFANA_URL, {
     method: 'POST',
@@ -51,21 +54,36 @@ async function updateProject(project) {
   const json = await response.json();
 
   const batchData = {};
+
   for (const series of json) {
     const validPoints = series.datapoints.filter(dp => dp[0] !== null);
     const last = validPoints.pop();
     if (!last) continue;
 
     const timestamp = new Date(last[1] * 1000).toISOString();
-    const metricName = series.target;
 
-    batchData[metricName] = {
-      current: String(last[0]),
+    // 🔹 detect type
+    const isOldest = series.target.includes("Oldest Task");
+
+    const metricName = series.target
+      .replace(" - Total", "")
+      .replace(" - Oldest Task", "");
+
+    const type = isOldest ? "oldestTask" : "total";
+
+    // 🔹 structure per metric
+    if (!batchData[metricName]) {
+      batchData[metricName] = {};
+    }
+
+    batchData[metricName][type] = {
+      value: String(last[0]),
       lastUpdated: timestamp
     };
   }
 
   const firebaseUrl = `${FIREBASE_BASE_URL}${project}.json`;
+
   const fbResponse = await fetch(firebaseUrl, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },

@@ -1,94 +1,131 @@
+const axios = require("axios");
+const cron = require("node-cron");
+const admin = require("firebase-admin");
 
-import fetch from 'node-fetch';
+// 🔐 Firebase init
+const serviceAccount = require("./firebase-key.json");
 
-const GRAFANA_URL = 'https://monitor.trax-cloud.com/api/datasources/proxy/29/render';
-const SESSION_ID = process.env.GRAFANA_SESSION;
-const FIREBASE_BASE_URL = process.env.FIREBASE_URL;
+admin.initializeApp({
+  credential: admin.credential.cert(serviceAccount),
+  databaseURL: "https://outflow-offline-validation-default-rtdb.firebaseio.com/"
+});
 
-const PROJECTS = [
-  "beiersdorfde", "beiersdorfes", "beiersdorfkz", "beiersdorfpt", "beiersdorfru",
-  "beiersdorfse", "beiersdorftr", "beiersdorfuae", "beiersdorfuk", "cbcil",
-  "danoneuk", "diageoes", "diageotz", "gskuz", "gskgr", "gskhu", "gsklt",
-  "haleonaesa", "haleongb", "haleonse", "marspl", "marssa", "mondelezkaza",
-  "mondelezno", "mdlzrusf", "mondelezsa", "mondelezuz", "pepsicouk",
-  "pernodricardes", "pgbaltics", "pgcz", "pges", "pgespharma", "pghr",
-  "pghu", "pgpl", "pgpt", "pgza", "schwartaude", "ulbe", "ulnl", "ulpt"
-];
+const db = admin.database();
 
-const METRICS = [
-  { path: "validation", name: "validation" },
-  { path: "offline_posm", name: "offline posm" },
-  { path: "voting", name: "voting" },
-  { path: "stitching", name: "stitching" },
-  { path: "Pricing_voting", name: "Pricing voting" },
-  { path: "offline_pricing", name: "offline pricing" },
-  { path: "Offline_Pricing_Voting", name: "Pricing voting" },
-  { path: "scene_recognition", name: "scene recognition" },
-  { path: "category_expert", name: "category expert" },
-  { path: "offline_validation", name: "offline validation" },
-  { path: "pricing_voting", name: "Pricing voting" },
-  { path: "voting_engine", name: "Engine Voting" },
-  { path: "offline_voting", name: "offline voting" }
-];
+// ================= CONFIG =================
+const USERNAME = "gss.kurunegala@gssintl.biz";
+const PASSWORD = "Gssk@2021";
 
-async function updateProject(project) {
-  const payload = METRICS.map(m =>
-    target=alias(prod.gauges.selector.queue.${m.path}.${project}.total,'${m.name}')
-  ).join("&") + "&from=-1h&until=now&format=json";
+// =========================================
 
-  const response = await fetch(GRAFANA_URL, {
-    method: 'POST',
-    headers: {
-      'Cookie': grafana_session=${SESSION_ID},
-      'Content-Type': 'application/x-www-form-urlencoded'
-    },
-    body: payload
-  });
+const projectValues = [
+  'marsuae','marsbh','marskw','marsom','marsqa'
+].map(v => `'${v}'`);
 
-  if (!response.ok) {
-    throw new Error(Grafana request failed for ${project}: ${response.status});
-  }
+const projectList = projectValues.join(",");
 
-  const json = await response.json();
+async function runQuery() {
+  try {
+    console.log("Running query...");
 
-  const batchData = {};
-  for (const series of json) {
-    const validPoints = series.datapoints.filter(dp => dp[0] !== null);
-    const last = validPoints.pop();
-    if (!last) continue;
+    const queryUrl = "https://monitor.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-retail/queries";
 
-    const timestamp = new Date(last[1] * 1000).toISOString();
-    const metricName = series.target;
-
-    batchData[metricName] = {
-      current: String(last[0]),
-      lastUpdated: timestamp
+    const query = {
+      query: `
+        #standardSQL
+        SELECT
+          TIMESTAMP_TRUNC(event_timestamp, HOUR) AS timestamp,
+          project_name,
+          task_name,
+          staff_id,
+          SUM(count) AS value
+        FROM \`trax-retail.backoffice.tl_hourly_report\`
+        WHERE
+          event_timestamp BETWEEN TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), DAY) AND CURRENT_TIMESTAMP()
+          AND project_name IN (${projectList})
+        GROUP BY 1,2,3,4
+        ORDER BY 1
+      `,
+      useLegacySql: false
     };
-  }
 
-  const firebaseUrl = ${FIREBASE_BASE_URL}${project}.json;
-  const fbResponse = await fetch(firebaseUrl, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(batchData)
-  });
+    const response = await axios.post(queryUrl, query, {
+      headers: {
+        Authorization: "Basic " + Buffer.from(USERNAME + ":" + PASSWORD).toString("base64"),
+        "Content-Type": "application/json"
+      }
+    });
 
-  if (!fbResponse.ok) {
-    throw new Error(Firebase update failed for ${project}: ${fbResponse.status});
-  }
+    const jobId = response.data.jobReference.jobId;
+    const location = response.data.jobReference.location;
 
-  console.log(✅ Updated: ${project});
-}
+    const resultUrl = `${queryUrl}/${jobId}?location=${location}`;
 
-async function main() {
-  for (const project of PROJECTS) {
-    try {
-      await updateProject(project);
-    } catch (err) {
-      console.error(❌ Error in ${project}:, err.message);
+    let result;
+
+    for (let i = 0; i < 5; i++) {
+      const res = await axios.get(resultUrl, {
+        headers: {
+          Authorization: "Basic " + Buffer.from(USERNAME + ":" + PASSWORD).toString("base64")
+        }
+      });
+
+      if (res.data.jobComplete) {
+        result = res.data;
+        break;
+      }
+
+      await new Promise(r => setTimeout(r, 1000));
     }
+
+    if (!result) throw new Error("Timeout");
+
+    const rows = processResults(result);
+
+    await saveToFirebase(rows);
+
+    console.log("Firebase updated successfully");
+
+  } catch (err) {
+    console.error("Error:", err.message);
   }
-  console.log("🚀 DONE");
 }
 
-main().catch(console.error);
+function processResults(result) {
+  if (!result.rows) return [];
+
+  const fields = result.schema.fields.map(f => f.name);
+
+  return result.rows.map(r => {
+    let obj = {};
+    r.f.forEach((c, i) => obj[fields[i]] = c.v);
+
+    return {
+      timestamp: obj.timestamp
+        ? new Date(parseFloat(obj.timestamp) * 1000).toISOString()
+        : null,
+      project: obj.project_name || "N/A",
+      task: obj.task_name || "N/A",
+      staff_id: obj.staff_id || "N/A",
+      value: obj.value || 0
+    };
+  });
+}
+
+// 🔥 SAVE TO FIREBASE
+async function saveToFirebase(data) {
+  const ref = db.ref("My Project");
+
+  // Option 1: overwrite all
+  await ref.set(data);
+
+  // Option 2 (better): push each row
+  // data.forEach(d => ref.push(d));
+}
+
+// ⏱ every 1 minute
+cron.schedule("* * * * *", () => {
+  runQuery();
+});
+
+console.log("Scheduler started...");

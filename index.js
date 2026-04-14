@@ -1,8 +1,7 @@
 const axios = require("axios");
-const cron = require("node-cron");
 const admin = require("firebase-admin");
 
-// 🔐 Firebase init
+// 🔐 Load Firebase key
 const serviceAccount = require("./firebase-key.json");
 
 admin.initializeApp({
@@ -12,23 +11,22 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// ================= CONFIG =================
-const USERNAME = "gss.kurunegala@gssintl.biz";
-const PASSWORD = "Gssk@2021";
+// 🔐 ENV variables
+const USERNAME = process.env.API_USERNAME;
+const PASSWORD = process.env.API_PASSWORD;
 
-// =========================================
-
-const projectValues = [
-  'marsuae','marsbh','marskw','marsom','marsqa'
-].map(v => `'${v}'`);
-
-const projectList = projectValues.join(",");
-
+// ✅ RUN FUNCTION
 async function runQuery() {
   try {
     console.log("Running query...");
 
     const queryUrl = "https://monitor.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-retail/queries";
+
+    const projectValues = [
+      'marsuae','marsbh','marskw','marsom','marsqa'
+    ].map(v => `'${v}'`);
+
+    const projectList = projectValues.join(",");
 
     const query = {
       query: `
@@ -49,9 +47,12 @@ async function runQuery() {
       useLegacySql: false
     };
 
+    const authHeader = "Basic " + Buffer.from(USERNAME + ":" + PASSWORD).toString("base64");
+
+    // 🔁 Start query
     const response = await axios.post(queryUrl, query, {
       headers: {
-        Authorization: "Basic " + Buffer.from(USERNAME + ":" + PASSWORD).toString("base64"),
+        Authorization: authHeader,
         "Content-Type": "application/json"
       }
     });
@@ -63,11 +64,10 @@ async function runQuery() {
 
     let result;
 
+    // 🔁 wait for result
     for (let i = 0; i < 5; i++) {
       const res = await axios.get(resultUrl, {
-        headers: {
-          Authorization: "Basic " + Buffer.from(USERNAME + ":" + PASSWORD).toString("base64")
-        }
+        headers: { Authorization: authHeader }
       });
 
       if (res.data.jobComplete) {
@@ -78,19 +78,20 @@ async function runQuery() {
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    if (!result) throw new Error("Timeout");
+    if (!result) throw new Error("Query timeout");
 
     const rows = processResults(result);
 
     await saveToFirebase(rows);
 
-    console.log("Firebase updated successfully");
+    console.log("✅ Firebase updated");
 
   } catch (err) {
-    console.error("Error:", err.message);
+    console.error("❌ ERROR:", err.message);
   }
 }
 
+// 🔄 Process data
 function processResults(result) {
   if (!result.rows) return [];
 
@@ -112,20 +113,12 @@ function processResults(result) {
   });
 }
 
-// 🔥 SAVE TO FIREBASE
+// 🔥 Save to Firebase
 async function saveToFirebase(data) {
-  const ref = db.ref("My Project");
+  const ref = db.ref("reg_masking");
 
-  // Option 1: overwrite all
-  await ref.set(data);
-
-  // Option 2 (better): push each row
-  // data.forEach(d => ref.push(d));
+  await ref.set(data); // overwrite
 }
 
-// ⏱ every 1 minute
-cron.schedule("* * * * *", () => {
-  runQuery();
-});
-
-console.log("Scheduler started...");
+// ▶️ RUN ONCE (GitHub cron will trigger every minute)
+runQuery();

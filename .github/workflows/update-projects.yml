@@ -1,4 +1,4 @@
-name: Run Firebase Updater Every Minute
+name: Firebase Updater (Every Minute)
 
 on:
   schedule:
@@ -10,20 +10,20 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout repository
+      - name: 📥 Checkout repo
         uses: actions/checkout@v4
 
       - name: 🟢 Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: 📦 Install dependencies
         run: npm install
 
       - name: 🔐 Create Firebase Key File
         run: |
-          echo '${{ secrets.FIREBASE_KEY }}' > firebase-key.json
+          echo "${{ secrets.FIREBASE_KEY }}" > firebase-key.json
 
       - name: ▶️ Run script
         run: node index.js

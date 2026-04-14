@@ -1,32 +1,29 @@
-name: Update Projects Data
+name: Run Firebase Updater Every Minute
 
 on:
-  push:
-    branches: [ main ]           # runs when you push to main branch
   schedule:
-    - cron: '*/15 * * * *'       # runs automatically every 15 minutes
-  workflow_dispatch:             # allows manual trigger from GitHub UI
-
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true   # force actions to use Node 24
+    - cron: "* * * * *"   # every 1 minute
+  workflow_dispatch:       # manual run button
 
 jobs:
-  update:
+  run-script:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: 🟢 Setup Node.js
+        uses: actions/setup-node@v3
         with:
-          node-version: '24'                 # your script will run on Node 24
+          node-version: "18"
 
-      - name: Install dependencies
-        run: npm install node-fetch
+      - name: 📦 Install dependencies
+        run: npm install
 
-      - name: Run script
+      - name: 🔐 Create Firebase Key File
+        run: |
+          echo '${{ secrets.FIREBASE_KEY }}' > firebase-key.json
+
+      - name: ▶️ Run script
         run: node index.js
-        env:
-          GRAFANA_SESSION: ${{ secrets.GRAFANA_SESSION }}
-          FIREBASE_URL: ${{ secrets.FIREBASE_URL }}

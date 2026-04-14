@@ -1,7 +1,7 @@
 const axios = require("axios");
 const admin = require("firebase-admin");
 
-// 🔐 Load Firebase key
+// 🔐 Firebase init
 const serviceAccount = require("./firebase-key.json");
 
 admin.initializeApp({
@@ -11,22 +11,24 @@ admin.initializeApp({
 
 const db = admin.database();
 
-// 🔐 ENV variables
+// 🔐 ENV variables (GitHub Secrets)
 const USERNAME = process.env.API_USERNAME;
 const PASSWORD = process.env.API_PASSWORD;
 
-// ✅ RUN FUNCTION
 async function runQuery() {
   try {
-    console.log("Running query...");
+    console.log("🚀 Script started");
 
-    const queryUrl = "https://monitor.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-retail/queries";
+    if (!USERNAME || !PASSWORD) {
+      throw new Error("Missing API credentials");
+    }
+
+    const queryUrl =
+      "https://monitor.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-retail/queries";
 
     const projectValues = [
-      'marsuae','marsbh','marskw','marsom','marsqa'
+      "marsuae", "marsbh", "marskw", "marsom", "marsqa"
     ].map(v => `'${v}'`);
-
-    const projectList = projectValues.join(",");
 
     const query = {
       query: `
@@ -39,17 +41,19 @@ async function runQuery() {
           SUM(count) AS value
         FROM \`trax-retail.backoffice.tl_hourly_report\`
         WHERE
-          event_timestamp BETWEEN TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), DAY) AND CURRENT_TIMESTAMP()
-          AND project_name IN (${projectList})
+          event_timestamp BETWEEN TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), DAY)
+          AND CURRENT_TIMESTAMP()
+          AND project_name IN (${projectValues.join(",")})
         GROUP BY 1,2,3,4
         ORDER BY 1
       `,
       useLegacySql: false
     };
 
-    const authHeader = "Basic " + Buffer.from(USERNAME + ":" + PASSWORD).toString("base64");
+    const authHeader =
+      "Basic " + Buffer.from(USERNAME + ":" + PASSWORD).toString("base64");
 
-    // 🔁 Start query
+    // Start query
     const response = await axios.post(queryUrl, query, {
       headers: {
         Authorization: authHeader,
@@ -64,8 +68,8 @@ async function runQuery() {
 
     let result;
 
-    // 🔁 wait for result
-    for (let i = 0; i < 5; i++) {
+    // Wait for result
+    for (let i = 0; i < 10; i++) {
       const res = await axios.get(resultUrl, {
         headers: { Authorization: authHeader }
       });
@@ -80,26 +84,26 @@ async function runQuery() {
 
     if (!result) throw new Error("Query timeout");
 
-    const rows = processResults(result);
+    const data = processResults(result);
 
-    await saveToFirebase(rows);
+    await saveToFirebase(data);
 
-    console.log("✅ Firebase updated");
+    console.log("✅ Firebase updated successfully");
 
   } catch (err) {
     console.error("❌ ERROR:", err.message);
   }
 }
 
-// 🔄 Process data
+// 🔄 PROCESS DATA
 function processResults(result) {
   if (!result.rows) return [];
 
   const fields = result.schema.fields.map(f => f.name);
 
-  return result.rows.map(r => {
+  return result.rows.map(row => {
     let obj = {};
-    r.f.forEach((c, i) => obj[fields[i]] = c.v);
+    row.f.forEach((c, i) => (obj[fields[i]] = c.v));
 
     return {
       timestamp: obj.timestamp
@@ -113,12 +117,11 @@ function processResults(result) {
   });
 }
 
-// 🔥 Save to Firebase
+// 🔥 SAVE TO FIREBASE
 async function saveToFirebase(data) {
   const ref = db.ref("reg_masking");
-
-  await ref.set(data); // overwrite
+  await ref.set(data);
 }
 
-// ▶️ RUN ONCE (GitHub cron will trigger every minute)
+// ▶️ RUN
 runQuery();

@@ -8,7 +8,7 @@ on:
 jobs:
   run-script:
     runs-on: ubuntu-latest
-    timeout-minutes: 2   # 🛑 safety (avoid stuck jobs)
+    timeout-minutes: 3
 
     steps:
       - name: Checkout
@@ -22,8 +22,15 @@ jobs:
       - name: Install deps
         run: npm install
 
-      - name: Run script (single execution)
-        run: node index.js
+      - name: Run script with retry
+        run: |
+          for i in 1 2 3
+          do
+            echo "Attempt $i..."
+            node index.js && break
+            echo "Failed. Retrying in 10s..."
+            sleep 10
+          done
         env:
           API_USERNAME: ${{ secrets.API_USERNAME }}
           API_PASSWORD: ${{ secrets.API_PASSWORD }}

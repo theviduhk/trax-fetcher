@@ -1,7 +1,11 @@
 {
-  "name": "trax-sync",
-  "version": "1.0.0",
+  "name": "functions",
+  "engines": {
+    "node": "18"
+  },
   "dependencies": {
+    "firebase-functions": "^4.4.1",
+    "firebase-admin": "^11.10.1",
     "node-fetch": "^2.6.7"
   }
 }

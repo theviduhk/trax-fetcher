@@ -1,34 +1,32 @@
-const axios = require("axios");
-const admin = require("firebase-admin");
+const fetch = require("node-fetch");
 
-// 🔐 Firebase init
-const serviceAccount = require("./firebase-key.json");
+// ==============================
+// CONFIG
+// ==============================
+const QUERY_URL = "https://monitor.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-retail/queries";
 
-admin.initializeApp({
-  credential: admin.credential.cert(serviceAccount),
-  databaseURL: "https://outflow-offline-validation-default-rtdb.firebaseio.com/"
-});
-
-const db = admin.database();
-
-// 🔐 ENV variables (GitHub Secrets)
 const USERNAME = process.env.API_USERNAME;
 const PASSWORD = process.env.API_PASSWORD;
 
-async function runQuery() {
+const FIREBASE_URL = "https://outflow-offline-validation-default-rtdb.firebaseio.com/reg_masking.json";
+
+// ==============================
+// PROJECT LIST
+// ==============================
+const projectValues = [
+  'marsuae','marsbh','marskw','marsom','marsqa','beiersdorfcz','bdftr','beiersdorfgr','beiersdorfng','beiersdorfpt','beiersdorfru','beiersdorfsp','beiersdorfuk','diageoes','diageotz','dlcpt','jtihr','marspl','marssa','mondelezde','mdlzrusf','mondelezse','mondelezza','pgcz','pngza2','ulbe','ulpt','pepsicouk','jdetr','diageoie','mondelezno','mondelezkaza',
+  'beiersdorfde','mondelezsa','straussdryil','mondelezuz','gskhu','tevapl','pgpl','inbevci','gsklt','ulnl','beiersdorfkz','beiersdorfuae','tevaru','inbevnl','ulit','pernodricardes',
+  'pgbaltics2','pghu','pgcroatia','pges','pgpt','pgespharma','pepsicofr','haleonaesa','haleonil','haleonse','gskpl','schwartautkde','gskgr','gskuz','straussfritolayil','straussil','cbcdairyil','cbcil'
+].map(v => `'${v}'`);
+
+const projectList = projectValues.join(", ");
+
+// ==============================
+// MAIN FUNCTION
+// ==============================
+async function main() {
   try {
-    console.log("🚀 Script started");
-
-    if (!USERNAME || !PASSWORD) {
-      throw new Error("Missing API credentials");
-    }
-
-    const queryUrl =
-      "https://monitor.trax-cloud.com/api/datasources/proxy/133/bigquery/v2/projects/trax-retail/queries";
-
-    const projectValues = [
-      "marsuae", "marsbh", "marskw", "marsom", "marsqa"
-    ].map(v => `'${v}'`);
+    const auth = Buffer.from(`${USERNAME}:${PASSWORD}`).toString("base64");
 
     const query = {
       query: `
@@ -41,87 +39,94 @@ async function runQuery() {
           SUM(count) AS value
         FROM \`trax-retail.backoffice.tl_hourly_report\`
         WHERE
-          event_timestamp BETWEEN TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), DAY)
-          AND CURRENT_TIMESTAMP()
-          AND project_name IN (${projectValues.join(",")})
-        GROUP BY 1,2,3,4
+          event_timestamp BETWEEN TIMESTAMP_TRUNC(CURRENT_TIMESTAMP(), DAY) AND CURRENT_TIMESTAMP()
+          AND task_name IN (
+            'stitching', 'voting_engine', 'offline_validation', 'offline_posm',
+            'scene_recognition', 'voting', 'validation', 'offline_pricing'
+          )
+          AND project_name IN (${projectList})
+        GROUP BY 1, 2, 3, 4
         ORDER BY 1
       `,
       useLegacySql: false
     };
 
-    const authHeader =
-      "Basic " + Buffer.from(USERNAME + ":" + PASSWORD).toString("base64");
-
-    // Start query
-    const response = await axios.post(queryUrl, query, {
+    // ==============================
+    // STEP 1: RUN QUERY
+    // ==============================
+    const res = await fetch(QUERY_URL, {
+      method: "POST",
       headers: {
-        Authorization: authHeader,
+        "Authorization": `Basic ${auth}`,
         "Content-Type": "application/json"
-      }
+      },
+      body: JSON.stringify(query)
     });
 
-    const jobId = response.data.jobReference.jobId;
-    const location = response.data.jobReference.location;
+    const data = await res.json();
 
-    const resultUrl = `${queryUrl}/${jobId}?location=${location}`;
+    if (!data.jobReference) throw new Error("No job ID");
+
+    const jobId = data.jobReference.jobId;
+    const location = data.jobReference.location;
+
+    // ==============================
+    // STEP 2: GET RESULTS
+    // ==============================
+    const resultUrl = `${QUERY_URL}/${jobId}?location=${location}`;
 
     let result;
-
-    // Wait for result
     for (let i = 0; i < 10; i++) {
-      const res = await axios.get(resultUrl, {
-        headers: { Authorization: authHeader }
+      const r = await fetch(resultUrl, {
+        headers: { "Authorization": `Basic ${auth}` }
       });
 
-      if (res.data.jobComplete) {
-        result = res.data;
-        break;
-      }
+      result = await r.json();
+
+      if (result.jobComplete) break;
 
       await new Promise(r => setTimeout(r, 1000));
     }
 
-    if (!result) throw new Error("Query timeout");
+    if (!result.rows) {
+      console.log("No data");
+      return;
+    }
 
-    const data = processResults(result);
+    // ==============================
+    // STEP 3: PROCESS DATA
+    // ==============================
+    const fields = result.schema.fields.map(f => f.name);
 
-    await saveToFirebase(data);
+    const rows = result.rows.map(row => {
+      let obj = {};
+      row.f.forEach((col, i) => {
+        obj[fields[i]] = col.v;
+      });
 
-    console.log("✅ Firebase updated successfully");
+      return {
+        timestamp: obj.timestamp ? new Date(obj.timestamp * 1000).toISOString() : null,
+        project: obj.project_name,
+        task: obj.task_name,
+        gid: obj.staff_id,
+        value: Number(obj.value)
+      };
+    });
+
+    // ==============================
+    // STEP 4: PUSH TO FIREBASE
+    // ==============================
+    await fetch(FIREBASE_URL, {
+      method: "PUT", // overwrite
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(rows)
+    });
+
+    console.log("Firebase updated:", rows.length);
 
   } catch (err) {
-    console.error("❌ ERROR:", err.message);
+    console.error("Error:", err.message);
   }
 }
 
-// 🔄 PROCESS DATA
-function processResults(result) {
-  if (!result.rows) return [];
-
-  const fields = result.schema.fields.map(f => f.name);
-
-  return result.rows.map(row => {
-    let obj = {};
-    row.f.forEach((c, i) => (obj[fields[i]] = c.v));
-
-    return {
-      timestamp: obj.timestamp
-        ? new Date(parseFloat(obj.timestamp) * 1000).toISOString()
-        : null,
-      project: obj.project_name || "N/A",
-      task: obj.task_name || "N/A",
-      staff_id: obj.staff_id || "N/A",
-      value: obj.value || 0
-    };
-  });
-}
-
-// 🔥 SAVE TO FIREBASE
-async function saveToFirebase(data) {
-  const ref = db.ref("reg_masking");
-  await ref.set(data);
-}
-
-// ▶️ RUN
-runQuery();
+main();

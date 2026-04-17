@@ -117,16 +117,41 @@ async function main() {
     // STEP 4: PUSH TO FIREBASE
     // ==============================
     await fetch(FIREBASE_URL, {
-      method: "PUT", // overwrite
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(rows)
     });
 
-    console.log("Firebase updated:", rows.length);
+    console.log("✅ Firebase updated:", rows.length);
 
   } catch (err) {
-    console.error("Error:", err.message);
+    console.error("❌ Error:", err.message);
   }
 }
 
-main();
+// ==============================
+// SCHEDULER (EVERY 1 MINUTE)
+// ==============================
+let isRunning = false;
+
+async function run() {
+  if (isRunning) {
+    console.log("⏳ Previous job still running, skipping...");
+    return;
+  }
+
+  isRunning = true;
+  console.log("🚀 Running job at:", new Date().toISOString());
+
+  try {
+    await main();
+  } finally {
+    isRunning = false;
+  }
+}
+
+// run immediately
+run();
+
+// run every 1 minute
+setInterval(run, 60 * 1000);

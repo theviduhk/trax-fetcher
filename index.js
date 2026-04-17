@@ -8,7 +8,7 @@ const QUERY_URL = "https://monitor.trax-cloud.com/api/datasources/proxy/133/bigq
 const USERNAME = process.env.API_USERNAME;
 const PASSWORD = process.env.API_PASSWORD;
 
-const FIREBASE_URL = "https://outflow-offline-validation-default-rtdb.firebaseio.com/reg_masking.json";
+const FIREBASE_URL = "https://outflow-offline-validation-default-rtdb.firebaseio.com/My_Project.json";
 
 // ==============================
 // PROJECT LIST

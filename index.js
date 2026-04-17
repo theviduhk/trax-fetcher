@@ -9,7 +9,7 @@ const USERNAME = process.env.API_USERNAME;
 const PASSWORD = process.env.API_PASSWORD;
 
 // 🔥 Overwrite target
-const FIREBASE_URL = "https://outflow-offline-validation-default-rtdb.firebaseio.com/My_Project.json";
+const FIREBASE_URL = "https://project-outflow-stitching-default-rtdb.firebaseio.com/My_Project.json";
 
 // ==============================
 // PROJECT LIST

@@ -1,8 +1,8 @@
-name: Firebase Updater (Every Minute)
+name: Run Script Every Minute
 
 on:
   schedule:
-    - cron: "* * * * *"
+    - cron: "* * * * *"   # every minute
   workflow_dispatch:
 
 jobs:
@@ -10,22 +10,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout repo
-        uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v3
 
-      - name: 🟢 Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v3
         with:
-          node-version: "24"
+          node-version: 18
 
-      - name: 📦 Install dependencies
+      - name: Install deps
         run: npm install
 
-      - name: 🔐 Create Firebase Key File
-        run: |
-          echo "${{ secrets.FIREBASE_KEY }}" > firebase-key.json
-
-      - name: ▶️ Run script
+      - name: Run script
         run: node index.js
         env:
           API_USERNAME: ${{ secrets.API_USERNAME }}

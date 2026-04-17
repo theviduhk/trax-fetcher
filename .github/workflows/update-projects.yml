@@ -1,8 +1,8 @@
-name: Run Script Every Minute
+name: Run Script Every 5 Minutes
 
 on:
   schedule:
-    - cron: "* * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -19,18 +19,11 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install deps
+      - name: Install dependencies
         run: npm install
 
-      - name: Run script with retry
-        run: |
-          for i in 1 2 3
-          do
-            echo "Attempt $i..."
-            node index.js && break
-            echo "Failed. Retrying in 10s..."
-            sleep 10
-          done
+      - name: Run script
+        run: node index.js
         env:
           API_USERNAME: ${{ secrets.API_USERNAME }}
           API_PASSWORD: ${{ secrets.API_PASSWORD }}

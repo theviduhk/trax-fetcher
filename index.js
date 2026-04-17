@@ -8,6 +8,7 @@ const QUERY_URL = "https://monitor.trax-cloud.com/api/datasources/proxy/133/bigq
 const USERNAME = process.env.API_USERNAME;
 const PASSWORD = process.env.API_PASSWORD;
 
+// 🔥 Overwrite target
 const FIREBASE_URL = "https://outflow-offline-validation-default-rtdb.firebaseio.com/My_Project.json";
 
 // ==============================
@@ -65,18 +66,19 @@ async function main() {
 
     const data = await res.json();
 
-    if (!data.jobReference) throw new Error("No job ID");
+    if (!data.jobReference) throw new Error("No job ID received");
 
     const jobId = data.jobReference.jobId;
     const location = data.jobReference.location;
 
     // ==============================
-    // STEP 2: GET RESULTS
+    // STEP 2: WAIT FOR RESULT
     // ==============================
     const resultUrl = `${QUERY_URL}/${jobId}?location=${location}`;
 
     let result;
-    for (let i = 0; i < 10; i++) {
+
+    for (let i = 0; i < 15; i++) {
       const r = await fetch(resultUrl, {
         headers: { "Authorization": `Basic ${auth}` }
       });
@@ -85,11 +87,12 @@ async function main() {
 
       if (result.jobComplete) break;
 
-      await new Promise(r => setTimeout(r, 1000));
+      console.log("⏳ Waiting for query...");
+      await new Promise(r => setTimeout(r, 1500));
     }
 
     if (!result.rows) {
-      console.log("No data");
+      console.log("⚠️ No data returned → skip overwrite");
       return;
     }
 
@@ -100,12 +103,13 @@ async function main() {
 
     const rows = result.rows.map(row => {
       let obj = {};
+
       row.f.forEach((col, i) => {
         obj[fields[i]] = col.v;
       });
 
       return {
-        timestamp: obj.timestamp ? new Date(obj.timestamp * 1000).toISOString() : null,
+        timestamp: obj.timestamp || null,
         project: obj.project_name,
         task: obj.task_name,
         gid: obj.staff_id,
@@ -114,18 +118,22 @@ async function main() {
     });
 
     // ==============================
-    // STEP 4: PUSH TO FIREBASE
+    // STEP 4: OVERWRITE FIREBASE
     // ==============================
-    await fetch(FIREBASE_URL, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(rows)
-    });
+    if (rows.length > 0) {
+      await fetch(FIREBASE_URL, {
+        method: "PUT", // 🔥 FULL REPLACE
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(rows)
+      });
 
-    console.log("✅ Firebase updated:", rows.length);
+      console.log("✅ Firebase overwritten:", rows.length);
+    } else {
+      console.log("⚠️ Empty data → not overwriting");
+    }
 
   } catch (err) {
-    console.error("❌ Error:", err.message);
+    console.error("❌ ERROR:", err.message);
   }
 }
 

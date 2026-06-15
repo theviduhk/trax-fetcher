@@ -15,7 +15,7 @@ const FIREBASE_URL = "https://project-outflow-stitching-default-rtdb.firebaseio.
 // ==============================
 const projectValues = [
   'marsuae','marsbh','marskw','marsom','marsqa','beiersdorfcz','bdftr','beiersdorfgr','beiersdorfng','beiersdorfpt','beiersdorfru','beiersdorfsp','beiersdorfuk','diageoes','diageotz','dlcpt','jtihr','marspl','marssa','mondelezde','mdlzrusf','mondelezse','mondelezza','pgcz','pngza2','ulbe','ulpt','pepsicouk','jdetr','diageoie','mondelezno','mondelezkaza',
-  'beiersdorfde','mondelezsa','straussdryil','mondelezuz','gskhu','tevapl','pgpl','inbevci','gsklt','ulnl','beiersdorfkz','beiersdorfuae','tevaru','inbevnl','ulit','pernodricardes',
+  'beiersdorfde','mondelezsa','straussdryil','mondelezuz','gskhu','tevapl','pgpl','inbevci','gsklt','diageofr','ulnl','beiersdorfkz','beiersdorfuae','tevaru','inbevnl','ulit','pernodricardes',
   'pgbaltics2','pghu','pgcroatia','pges','pgpt','pgespharma','pepsicofr','haleonaesa','haleonil','haleonse','gskpl','schwartautkde','gskgr','gskuz','straussfritolayil','straussil','cbcdairyil','cbcil'
 ].map(v => `'${v}'`);
 
